@@ -1,0 +1,5 @@
+from .create_endpoint_test import CreateParcelsTestCase
+from .get_endpoint_test import GetParcelTestCase
+from .list_endpoint_test import ListParcelsTestCase
+from .types_endpoint_test import ParcelTypesTestCase
+from .claim_endpoint_test import ClaimParcelTestCase

@@ -1,0 +1,133 @@
+version: '3.3'
+name: delta
+
+networks:
+  app-tier:
+    driver: bridge
+
+x-backend-base: &backend_base
+  image: delta:latest
+  restart: always
+  build:
+    context: ..
+    dockerfile: ./docker/Dockerfile
+  env_file: ../src/.env
+  depends_on:
+    - postgresql
+  volumes:
+    - ../src:/usr/src/app/
+  networks:
+    - app-tier
+  environment:
+    - DOMAINS=127.0.0.1
+
+
+services:
+
+  api:
+    <<: [ *backend_base ]
+    container_name: delta-api
+    command: sh -c "
+      python manage.py collectstatic --noinput &&
+      python manage.py runserver 0:8000"
+    depends_on:
+      - migration-manager
+      #      - nginx
+      - redis
+      - rabbitmq
+    ports:
+      - "8000:8000"
+
+  migration-manager:
+    <<: [ *backend_base ]
+    container_name: delta-migration-manager
+    command: sh -c "
+      python manage.py makemigraions
+      && python manage.py migrate django_celery_beat
+      && python manage.py migrate --noinput
+      && python manage.py loaddata apps/*/fixtures/*.json"
+
+  #  tester:
+  #    <<: [ *backend_base ]
+  #    command: python manage.py test
+  #    depends_on:
+  #      - redis
+  #      - postgresql
+
+
+  postgresql:
+    restart: always
+    container_name: delta-postgresql
+    image: 'bitnami/postgresql:latest'
+    volumes:
+      - postgres_data:/bitnami/postgresql/
+    ports:
+      - "5432:5432"
+    networks:
+      - app-tier
+    environment:
+      - POSTGRESQL_DATABASE=delta
+      - POSTGRESQL_USERNAME=delta
+      - POSTGRESQL_PASSWORD=delta
+
+  redis:
+    restart: always
+    image: "bitnami/redis:latest"
+    container_name: "delta-redis"
+    command: redis-server /usr/local/etc/redis/redis.conf --requirepass delta
+    depends_on:
+      - postgresql
+    ports:
+      - "6379:6379"
+    networks:
+      - app-tier
+    volumes:
+      - ./configs/redis/redis.conf:/usr/local/etc/redis/redis.conf
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: 'delta-rabbitmq'
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
+      - ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
+    networks:
+      - app-tier
+    env_file: ../src/.env
+
+
+  celery-worker:
+    <<: [ *backend_base ]
+    container_name: delta-celery-worker
+    command: celery --app celeryconf worker -l INFO -n celery-worker
+    depends_on:
+      - migration-manager
+      - redis
+      - rabbitmq
+      - celery-beat
+
+  celery-beat:
+    <<: [ *backend_base ]
+    container_name: delta-celery-beat
+    command: celery -A celeryconf beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      - redis
+      - rabbitmq
+
+
+#  nginx:
+#    restart: always
+#    container_name: delta-nginx
+#    image: 'bitnami/nginx:latest'
+#    ports:
+#      - "80:80"
+#      - "443:443"
+#    volumes:
+#      - ./configs/nginx/delta-test.conf:/opt/bitnami/nginx/conf/server_blocks/my_server_block.conf:ro
+#    networks:
+#      - app-tier
+
+volumes:
+  postgres_data:

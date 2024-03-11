@@ -1,0 +1,23 @@
+[
+  {
+    "model": "parcels.ParcelType",
+    "pk": 1,
+    "fields": {
+      "name": "Разное"
+    }
+  },
+  {
+    "model": "parcels.ParcelType",
+    "pk": 2,
+    "fields": {
+      "name": "Одежда"
+    }
+  },
+  {
+    "model": "parcels.ParcelType",
+    "pk": 3,
+    "fields": {
+      "name": "Электроника"
+    }
+  }
+]
